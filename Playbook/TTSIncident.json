@@ -1,0 +1,199 @@
+{
+    "$schema":  "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion":  "1.0.0.0",
+    "metadata":  {
+        "title":  "",
+        "description":  "",
+        "prerequisites":  "",
+        "postDeployment":  [
+        ],
+        "prerequisitesDeployTemplateFile":  "",
+        "lastUpdateTime":  "",
+        "entities":  [
+        ],
+        "tags":  [
+        ],
+        "support":  {
+            "tier":  "community",
+            "armtemplate":  "Generated from https://github.com/Azure/Azure-Sentinel/tree/master/Tools/Playbook-ARM-Template-Generator"
+        },
+        "author":  {
+            "name":  ""
+        }
+    },
+    "parameters":  {
+        "PlaybookName":  {
+            "defaultValue":  "TTSIncident",
+            "type":  "string"
+        }
+    },
+    "variables":  {
+        "MicrosoftSentinelConnectionName":  "[concat('MicrosoftSentinel-', parameters('PlaybookName'))]",
+        "OnedriveforbusinessConnectionName":  "[concat('Onedriveforbusiness-', parameters('PlaybookName'))]"
+    },
+    "resources":  [
+        {
+            "properties":  {
+                "provisioningState":  "Succeeded",
+                "state":  "Disabled",
+                "definition":  {
+                    "$schema":  "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion":  "1.0.0.0",
+                    "parameters":  {
+                        "$connections":  {
+                            "defaultValue":  {
+                            },
+                            "type":  "Object"
+                        }
+                    },
+                    "triggers":  {
+                        "Microsoft_Sentinel_incident":  {
+                            "type":  "ApiConnectionWebhook",
+                            "inputs":  {
+                                "body":  {
+                                    "callback_url":  "@{listCallbackUrl()}"
+                                },
+                                "host":  {
+                                    "connection":  {
+                                        "name":  "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "path":  "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions":  {
+                        "Create_file":  {
+                            "runAfter":  {
+                                "Send":  [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type":  "ApiConnection",
+                            "inputs":  {
+                                "body":  "@body('Send')",
+                                "host":  {
+                                    "connection":  {
+                                        "name":  "@parameters('$connections')['onedriveforbusiness']['connectionId']"
+                                    }
+                                },
+                                "method":  "post",
+                                "path":  "/datasets/default/files",
+                                "queries":  {
+                                    "folderPath":  "/Incidents",
+                                    "name":  "IncidentID@{triggerBody()?['object']?['properties']?['incidentNumber']}:Time-@{triggerBody()?['object']?['properties']?['createdTimeUtc']}.wav"
+                                }
+                            },
+                            "runtimeConfiguration":  {
+                                "contentTransfer":  {
+                                    "transferMode":  "Chunked"
+                                }
+                            }
+                        },
+                        "Get-Token":  {
+                            "runAfter":  {
+                            },
+                            "type":  "Http",
+                            "inputs":  {
+                                "headers":  {
+                                    "Accept":  "application/json",
+                                    "Content-Type":  "application/json",
+                                    "Ocp-Apim-Subscription-Key":  "61ec5822bc0946b9936601bf7d09ed1b"
+                                },
+                                "method":  "POST",
+                                "uri":  "https://eastus.api.cognitive.microsoft.com/sts/v1.0/issuetoken"
+                            }
+                        },
+                        "Send":  {
+                            "runAfter":  {
+                                "Get-Token":  [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type":  "Http",
+                            "inputs":  {
+                                "body":  "\u003cspeak version='1.0' xml:lang='en-US'\u003e\u003cvoice xml:lang='en-US' xml:gender='Male'     name='en-US-ChristopherNeural'\u003e   IncidentID@{triggerBody()?['object']?['properties']?['incidentNumber']}where title is @{triggerBody()?['object']?['properties']?['title']}\u003c/voice\u003e\u003c/speak\u003e",
+                                "headers":  {
+                                    "Authorization":  "Bearer @{body('Get-Token')}",
+                                    "Content-Type":  "application/ssml+xml",
+                                    "X-Microsoft-OutputFormat":  "audio-16khz-128kbitrate-mono-mp3"
+                                },
+                                "method":  "POST",
+                                "uri":  "https://eastus.tts.speech.microsoft.com/cognitiveservices/v1"
+                            }
+                        }
+                    },
+                    "outputs":  {
+                    }
+                },
+                "parameters":  {
+                    "$connections":  {
+                        "value":  {
+                            "azuresentinel":  {
+                                "connectionId":  "[resourceId('Microsoft.Web/connections', variables('MicrosoftSentinelConnectionName'))]",
+                                "connectionName":  "[variables('MicrosoftSentinelConnectionName')]",
+                                "id":  "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/Azuresentinel')]",
+                                "connectionProperties":  {
+                                    "authentication":  {
+                                        "type":  "ManagedServiceIdentity"
+                                    }
+                                }
+                            },
+                            "onedriveforbusiness":  {
+                                "connectionId":  "[resourceId('Microsoft.Web/connections', variables('OnedriveforbusinessConnectionName'))]",
+                                "connectionName":  "[variables('OnedriveforbusinessConnectionName')]",
+                                "id":  "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/Onedriveforbusiness')]"
+                            }
+                        }
+                    }
+                }
+            },
+            "name":  "[parameters('PlaybookName')]",
+            "type":  "Microsoft.Logic/workflows",
+            "location":  "[resourceGroup().location]",
+            "tags":  {
+                "hidden-SentinelTemplateName":  "TTSIncident",
+                "hidden-SentinelTemplateVersion":  "1.0"
+            },
+            "identity":  {
+                "type":  "SystemAssigned"
+            },
+            "apiVersion":  "2017-07-01",
+            "dependsOn":  [
+                "[resourceId('Microsoft.Web/connections', variables('MicrosoftSentinelConnectionName'))]",
+                "[resourceId('Microsoft.Web/connections', variables('OnedriveforbusinessConnectionName'))]"
+            ]
+        },
+        {
+            "type":  "Microsoft.Web/connections",
+            "apiVersion":  "2016-06-01",
+            "name":  "[variables('MicrosoftSentinelConnectionName')]",
+            "location":  "[resourceGroup().location]",
+            "kind":  "V1",
+            "properties":  {
+                "displayName":  "[variables('MicrosoftSentinelConnectionName')]",
+                "customParameterValues":  {
+                },
+                "parameterValueType":  "Alternative",
+                "api":  {
+                    "id":  "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/Azuresentinel')]"
+                }
+            }
+        },
+        {
+            "type":  "Microsoft.Web/connections",
+            "apiVersion":  "2016-06-01",
+            "name":  "[variables('OnedriveforbusinessConnectionName')]",
+            "location":  "[resourceGroup().location]",
+            "kind":  "V1",
+            "properties":  {
+                "displayName":  "[variables('OnedriveforbusinessConnectionName')]",
+                "customParameterValues":  {
+                },
+                "api":  {
+                    "id":  "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/Onedriveforbusiness')]"
+                }
+            }
+        }
+    ]
+}
